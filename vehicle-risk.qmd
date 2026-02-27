@@ -2,13 +2,12 @@
 title: "Vehicle Risk"
 format:
   dashboard: 
-    logo: "images/logo.png"
     orientation: columns
 ---
 
 ## Column {width="35%"}
 
-Placeholder text for Column 1
+Enter the vehicle info below:
 
 ```{r, loadpackages}
 #| echo: false
@@ -16,10 +15,67 @@ Placeholder text for Column 1
 library(tidyverse)
 ```
 
-```{r, printstarwars}
-head(starwars)
+```{r, readcsv, message=FALSE}
+#| echo: false
+#| include: false
+auto_claims <- read_csv("data/auto_claims.csv")
 ```
 
+```{r, sendtoojs}
+#| echo: false
+#| include: false
+
+# The R tibble must be passed to Observable JavaScript before it can be accessed in
+# an OJS cell.
+ojs_define(auto_claims_ojs = auto_claims)
+```
+
+```{ojs, createYearDropdown}
+//| expandable: false
+
+// Transpose the data to make it usable in ojs.
+auto_claims_transposed = transpose(auto_claims_ojs)
+
+// Create a dropdown menu of the vehicle year.
+viewof vehYearDropdown = Inputs.select(
+  Array.from(new Set(auto_claims_transposed.map(d => d.vehicle_year))),
+  {
+    label: "Choose the vehicle year",
+    unique: true, // Only include each location once.
+    sort: true // Sort the options alphabetically.
+    }
+)
+```
+
+```{ojs, createMakeDropdown}
+//| expandable: false
+
+// Create a dropdown menu of the vehicle make.
+viewof vehMakeDropdown = Inputs.select(
+  Array.from(new Set(auto_claims_transposed.filter(d => d.vehicle_year === vehYearDropdown)
+  .map(d => d.vehicle_make))),
+  {
+    label: "Choose the vehicle make",
+    unique: true, // Only include each location once.
+    sort: true // Sort the options alphabetically.
+    }
+)
+```
+
+```{ojs, createModelDropdown}
+//| expandable: false
+
+// Create a dropdown menu of the vehicle model.
+viewof vehModelDropdown = Inputs.select(
+  Array.from(new Set(auto_claims_transposed.filter(d => d.vehicle_make === vehMakeDropdown)
+  .map(d => d.vehicle_model))),
+  {
+    label: "Choose the vehicle model",
+    unique: true, // Only include each location once.
+    sort: true // Sort the options alphabetically.
+    }
+)
+```
 
 
 ## Column {width="65%"}
@@ -27,6 +83,7 @@ head(starwars)
 ### Row {height="10%"}
 
 Placeholder text for Column 2, Row 1
+
 
 ### Row {height="70%"}
 

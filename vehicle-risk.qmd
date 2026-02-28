@@ -18,7 +18,12 @@ library(tidyverse)
 ```{r, readcsv, message=FALSE}
 #| echo: false
 #| include: false
-auto_claims <- read_csv("data/auto_claims.csv")
+
+# Read CSV file
+vehicles <- read_csv("data/insured_vehicles.csv")
+
+# Replace NA with 0 in the claim_amount column
+vehicles$claim_amount[is.na(vehicles$claim_amount)] <- 0
 ```
 
 ```{r, sendtoojs}
@@ -27,18 +32,18 @@ auto_claims <- read_csv("data/auto_claims.csv")
 
 # The R tibble must be passed to Observable JavaScript before it can be accessed in
 # an OJS cell.
-ojs_define(auto_claims_ojs = auto_claims)
+ojs_define(vehicles_ojs = vehicles)
 ```
 
 ```{ojs, createYearDropdown}
 //| expandable: false
 
 // Transpose the data to make it usable in ojs.
-auto_claims_transposed = transpose(auto_claims_ojs)
+vehicles_transposed = transpose(vehicles_ojs)
 
 // Create a dropdown menu of the vehicle year.
 viewof vehYearDropdown = Inputs.select(
-  Array.from(new Set(auto_claims_transposed.map(d => d.vehicle_year))),
+  Array.from(new Set(vehicles_transposed.map(d => d.vehicle_year))).map(y => y.toString()),
   {
     label: "Choose the vehicle year",
     unique: true, // Only include each location once.
@@ -52,7 +57,7 @@ viewof vehYearDropdown = Inputs.select(
 
 // Create a dropdown menu of the vehicle make.
 viewof vehMakeDropdown = Inputs.select(
-  Array.from(new Set(auto_claims_transposed.filter(d => d.vehicle_year === vehYearDropdown)
+  Array.from(new Set(vehicles_transposed.filter(d => d.vehicle_year.toString() === vehYearDropdown)
   .map(d => d.vehicle_make))),
   {
     label: "Choose the vehicle make",
@@ -67,7 +72,7 @@ viewof vehMakeDropdown = Inputs.select(
 
 // Create a dropdown menu of the vehicle model.
 viewof vehModelDropdown = Inputs.select(
-  Array.from(new Set(auto_claims_transposed.filter(d => d.vehicle_make === vehMakeDropdown)
+  Array.from(new Set(vehicles_transposed.filter(d => d.vehicle_make === vehMakeDropdown)
   .map(d => d.vehicle_model))),
   {
     label: "Choose the vehicle model",
@@ -79,16 +84,61 @@ viewof vehModelDropdown = Inputs.select(
 
 
 ## Column {width="65%"}
+### Row {height="25%"}
+:::{.valuebox color="gray" title="Average claim size" .text-center}
+<div style="background-color: #333; color: white; border-radius: 10px; padding: 10px; display: flex; align-items: center">
+  <span style="font-size: 1vw; width: 100%;">
+```{ojs, avgClaimSize}
 
-### Row {height="10%"}
+//| expandable: false
+//| echo: false
+//| output: false
 
-Placeholder text for Column 2, Row 1
+// Create filtered datasets based on dropdown selections (include all vehicles)
+filtered_vehicle_all = vehicles_transposed.filter(d=>
+                d.vehicle_year.toString() === vehYearDropdown &&
+                d.vehicle_make === vehMakeDropdown &&
+                d.vehicle_model === vehModelDropdown)
+                
+// Create filtered datasets based on dropdown selections (vehicles with a claim only)
+filtered_vehicle_claim = vehicles_transposed.filter(d=>
+                d.vehicle_year.toString() === vehYearDropdown &&
+                d.vehicle_make === vehMakeDropdown &&
+                d.vehicle_model === vehModelDropdown &&
+                d.claim_amount > 0)
+
+// Calculate average
+avg_claim_amount =
+  filtered_vehicle_claim.length
+    ? filtered_vehicle_claim.reduce(
+        (sum, d) => sum + d.claim_amount,
+        0
+      ) / filtered_vehicle_claim.length
+    : null
+  
+// Return average value
+avg_claim_amount !== null
+  ? html`<span style="font-size:1vw">$${avg_claim_amount.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2})}</span>`
+  : "N/A"
+```
+ </span>
+</div>
+:::
+
+### Row {height="50%"}
+```{ojs}
+Plot.plot({
+  y: {grid: true, label: "Frequency"},
+  x: {label: "Claim Amount ($)"},
+  color: {legend: true},
+  marks: [
+    Plot.rectY(filtered_vehicle_claim, Plot.binX({y: "count"}, {x: "claim_amount"})),
+    Plot.ruleY([0])
+  ]
+})
+```
 
 
-### Row {height="70%"}
+### Row {height="25%"}
 
-Placeholder text for Column 2, Row 2
-
-### Row {height="20%"}
-
-Placeholder text for Column 2, Row 3
+Placeholder text for Column 2, Row 3 logistic regression - probability of a claim

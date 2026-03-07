@@ -21,9 +21,51 @@ library(tidyverse)
 
 # Read CSV file
 vehicles <- read_csv("data/insured_vehicles.csv")
+```
+
+```{r, dataCleanse}
+#| echo: false
+#| include: false
 
 # Replace NA with 0 in the claim_amount column
 vehicles$claim_amount[is.na(vehicles$claim_amount)] <- 0
+
+```
+
+```{r, createComparisonTables}
+#| echo: false
+#| include: false
+
+# Create data reliability classifications
+high <- "High data reliability - based on"
+medium <- "Medium data reliability - based on"
+low <- "Low data reliability - based on"
+
+# Create new dataframe that summarizes the claims for each vehicle year/make/model and classifies the data reliability based on the number of claims for each group.
+vehicle_level_summary <- 
+  vehicles %>%
+  filter(claim_amount > 0) %>%
+  group_by(vehicle_year, vehicle_make, vehicle_model) %>%
+  summarise(
+    avg_claim_severity = mean(claim_amount),
+    n_claims = n(),
+    .groups = "drop") %>%
+  mutate(
+    data_reliability = case_when(
+      n_claims >= 100 ~ paste(high, n_claims, "claims."),
+      n_claims >= 50 ~ paste(medium, n_claims, "claims."),
+      TRUE ~ paste(low, n_claims, "claim(s)."))
+)
+
+# Create a new dataframe with one row per year that lists the average claim size for each vehicle make/model group corresponding with that year
+vehicle_year_group <-
+  vehicle_level_summary %>%
+  group_by(vehicle_year) %>%
+  summarise(
+    claim_amount_values = list(avg_claim_severity),
+    .groups = "drop"
+  )
+
 ```
 
 ```{r, sendtoojs}
@@ -32,7 +74,9 @@ vehicles$claim_amount[is.na(vehicles$claim_amount)] <- 0
 
 # The R tibble must be passed to Observable JavaScript before it can be accessed in
 # an OJS cell.
-ojs_define(vehicles_ojs = vehicles)
+ojs_define(vehicles_ojs = vehicles,
+           vehicle_level_summary_ojs = vehicle_level_summary,
+           vehicle_year_group_ojs = vehicle_year_group)
 ```
 
 ```{ojs, createYearDropdown}
@@ -40,6 +84,8 @@ ojs_define(vehicles_ojs = vehicles)
 
 // Transpose the data to make it usable in ojs.
 vehicles_transposed = transpose(vehicles_ojs)
+vehicle_level_summary_transposed = transpose(vehicle_level_summary_ojs)
+vehicle_year_group_transposed = transpose(vehicle_year_group_ojs)
 
 // Create a dropdown menu of the vehicle year.
 viewof vehYearDropdown = Inputs.select(
@@ -118,17 +164,47 @@ avg_claim_amount =
   
 // Return average value
 avg_claim_amount !== null
-  ? html`<span style="font-size:1vw">$${avg_claim_amount.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2})}</span>`
+  ? html`<span style="font-size:2vw">$${avg_claim_amount.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2})}</span>`
+  : "N/A"
+
+// Return comparison
+percentile !== null
+  ? html`
+  <div style="font-size: .8vw">
+  This is higher than <b>${Math.round(percentile * 100)}%</b> of vehicles from the same year
+  </div>`
   : "N/A"
 ```
  </span>
 </div>
 :::
 
-### Row {height="50%"}
 ```{ojs}
+//| expandable: false
+//| echo: false
+//| output: false
+
+//| Find the selected vehicle
+vehicle_input = vehicle_level_summary_transposed.find(d =>
+  d.vehicle_year.toString() === vehYearDropdown &&
+  d.vehicle_make === vehMakeDropdown &&
+  d.vehicle_model === vehModelDropdown
+)
+
+//| Find the corresponding group of claims
+claim_size_lookup = vehicle_year_group_transposed.find(d=>
+  d.vehicle_year.toString() === vehYearDropdown).claim_amount_values
+  
+//| Calculate the percentile
+percentile = vehicle_input
+  ? d3.bisect(claim_size_lookup.sort(d3.ascending),
+  vehicle_input.avg_claim_severity) / claim_size_lookup.length
+  : null
+```
+
+```{ojs, histogram}
 Plot.plot({
-  y: {grid: true, label: "Frequency"},
+  y: {grid: true, label: "Number of Claims"},
   x: {label: "Claim Amount ($)"},
   color: {legend: true},
   marks: [
@@ -138,7 +214,91 @@ Plot.plot({
 })
 ```
 
+### Row {height="55%"}
 
-### Row {height="25%"}
+```{ojs, createBarChart}
 
-Placeholder text for Column 2, Row 3 logistic regression - probability of a claim
+
+// Create filtered datasets based on dropdown selections (vehicles with a claim only)
+filtered_vehicle_loss_type = vehicles_transposed.filter(d=>
+                d.vehicle_year.toString() === vehYearDropdown &&
+                d.vehicle_make === vehMakeDropdown &&
+                d.vehicle_model === vehModelDropdown &&
+                d.claim_amount > 0)
+
+
+// Create a horizontal bar graph using Observable Plot.
+Plot.plot({
+  marginLeft: 150,
+  marginRight: 40,
+  height: filtered_vehicle_loss_type.length * 2 + 100,
+  width: undefined,
+  x: {label: "Number of Losses"},
+  y: {label: "Loss Type"},
+  marks: [
+    Plot.barX(filtered_vehicle_loss_type, Plot.groupY(
+    { x: "count"},
+    { y: "loss_type",
+    sort: {y: "-x"}}),
+    {fill: "#888"}),
+    // Add data labels
+    Plot.text(
+      filtered_vehicle_loss_type,
+      Plot.groupY(
+        { x: "count", text: "count" },
+        { y: "loss_type", dx: 10}))
+  ]
+})
+
+```
+
+### Row {height="20%"}
+
+```{ojs}
+//| expandable: false
+//| echo: false
+//| output: false
+
+// Sort claim amounts
+claim_amounts_all = filtered_vehicle_claim.map(d => d.claim_amount).sort(d3.ascending)
+
+// Calculate 90th percentile
+percentile_90 = claim_amounts_all.length ? {
+  p90: d3.quantile(claim_amounts_all, .9)}
+: null
+
+```
+
+:::{.valuebox color="gray" .text-center}
+<div style="background-color: #333; color: white; border-radius: 10px; padding: 10px; display: flex; align-items: center">
+  <span style="font-size: 1vw; width: 100%;">
+```{ojs}
+
+// Display 90th percentile  
+percentile_90 !== null
+  ? html`
+  <div style="font-size: 1vw">
+  10% of claims are greater than <b>$${percentile_90.p90.toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:0})}</b>.
+  </div>`
+  : "N/A"
+```
+ </span>
+</div>
+:::
+
+:::{.valuebox color="gray" .text-center}
+<div style="background-color: #333; color: white; border-radius: 10px; padding: 10px; display: flex; align-items: center">
+  <span style="font-size: 1vw; width: 100%;">
+```{ojs}
+
+// Display data reliability  
+vehicle_input !== null
+  ? html`
+  <div style="font-size: 1vw">
+  <b>${vehicle_input.data_reliability}</b>
+  </div>`
+  : "N/A"
+```
+ </span>
+</div>
+:::

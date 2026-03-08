@@ -8,22 +8,22 @@ website:
     left:
       - href: index.qmd
         text: Home
-      - href: about.qmd
-        text: About
       - href: vehicle-risk.qmd
         text: Vehicle Risk
       - href: driver-risk.qmd
         text: Driver Risk
+      - href: references.qmd
+        text: References
   sidebar: 
     contents: 
       - href: index.qmd
         text: Home
-      - href: about.qmd
-        text: About
       - href: vehicle-risk.qmd
         text: Vehicle Risk
       - href: driver-risk.qmd
         text: Driver Risk
+      - href: references.qmd
+        text: References
 
 format:
   html:

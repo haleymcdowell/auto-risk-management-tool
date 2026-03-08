@@ -5,9 +5,9 @@ format:
     orientation: columns
 ---
 
-## Column {width="35%"}
+## Column {width="45%"}
 
-Placeholder text for Column 1
+Enter the driver info below:
 
 ```{r, loadpackages}
 #| echo: false
@@ -15,20 +15,208 @@ Placeholder text for Column 1
 library(tidyverse)
 ```
 
-```{r, printstarwars}
-head(starwars)
+```{r, readcsv, message=FALSE}
+#| echo: false
+#| include: false
+
+# Read CSV file
+vehicles <- read_csv("data/insured_vehicles.csv")
 ```
 
-## Column {width="65%"}
+```{r, dataCleanse}
+#| echo: false
+#| include: false
 
-### Row {height="10%"}
+# Replace NA with 0 in the claim_amount column
+vehicles$claim_amount[is.na(vehicles$claim_amount)] <- 0
 
-Placeholder text for Column 2, Row 1
+# Create age ranges
+vehicles <- vehicles %>%
+  mutate(
+    age_range = case_when(
+      age < 30 ~ paste("<30"),
+      age < 40 ~ paste("30-39"),
+      age < 50 ~ paste("40-49"),
+      age < 60 ~ paste("50-59"),
+      age < 70 ~ paste("60-69"),
+      TRUE ~ paste(">=70")))
 
-### Row {height="70%"}
+```
 
-Placeholder text for Column 2, Row 2
+```{r, createDriverSummary}
+
+# Create data reliability classifications
+high <- "High data reliability - based on"
+medium <- "Medium data reliability - based on"
+low <- "Low data reliability - based on"
+
+# Create new dataframe that summarizes the claims for each driver group and classifies the data reliability based on the number of claims for each group.
+driver_level_summary <- 
+  vehicles %>%
+  filter(claim_amount > 0) %>%
+  group_by(policyholder_gender, age_range, policy_state, policyholder_occupation_sector) %>%
+  summarise(
+    avg_claim_severity = mean(claim_amount),
+    n_claims = n(),
+    .groups = "drop") %>%
+  mutate(
+    data_reliability = case_when(
+      n_claims >= 100 ~ paste(high, n_claims, "claims."),
+      n_claims >= 50 ~ paste(medium, n_claims, "claims."),
+      TRUE ~ paste(low, n_claims, "claim(s)."))
+)
+```
+
+```{r, sendtoojs}
+#| echo: false
+#| include: false
+
+# The R tibble must be passed to Observable JavaScript before it can be accessed in
+# an OJS cell.
+ojs_define(vehicles_ojs = vehicles,
+           driver_level_summary_ojs = driver_level_summary)
+```
+
+```{ojs, createGenderDropdown}
+//| expandable: false
+
+// Transpose the data to make it usable in ojs.
+vehicles_transposed = transpose(vehicles_ojs)
+driver_level_summary_transposed = transpose(driver_level_summary_ojs)
+
+// Create a dropdown menu of the driver's gender.
+viewof driverGenderDropdown = Inputs.select(
+  Array.from(new Set(vehicles_transposed.map(d => d.policyholder_gender))),
+  {
+    label: "Choose the driver's gender",
+    unique: true, // Only include each location once.
+    sort: true // Sort the options alphabetically.
+    }
+)
+
+```
+
+```{ojs, createAgeDropdown}
+//| expandable: false
+
+// Create a dropdown menu of the driver's age.
+viewof driverAgeDropdown = Inputs.select(
+  Array.from(new Set(vehicles_transposed.map(d => d.age_range))),
+  {
+    label: "Choose the driver's age range",
+    unique: true, // Only include each location once.
+    sort: true // Sort the options alphabetically.
+    }
+)
+```
+
+```{ojs, createStateDropdown}
+//| expandable: false
+
+// Create a dropdown menu of the driver's license state.
+viewof driverStateDropdown = Inputs.select(
+  Array.from(new Set(vehicles_transposed.map(d => d.policy_state))),
+  {
+    label: "Choose the driver's license state",
+    unique: true, // Only include each location once.
+    sort: true // Sort the options alphabetically.
+    }
+)
+```
+
+```{ojs, createOccupationSectorDropdown}
+//| expandable: false
+
+// Create a dropdown menu of the driver's occupation sector.
+viewof driverOccSectorDropdown = Inputs.select(
+  Array.from(new Set(vehicles_transposed.map(d => d.policyholder_occupation_sector))),
+  {
+    label: "Choose the driver's occupation sector",
+    unique: true, // Only include each location once.
+    sort: true // Sort the options alphabetically.
+    }
+)
+```
+
+## Column {width="55%"}
+
+### Row {height="25%"}
+:::{.valuebox color="gray" title="Average claim size" .text-center}
+<div style="background-color: #333; color: white; border-radius: 10px; padding: 10px; display: flex; align-items: center">
+  <span style="font-size: 1vw; width: 100%;">
+```{ojs}
+//| expandable: false
+//| echo: false
+
+// Create filtered datasets based on dropdown selections (drivers with a claim only)
+filtered_driver_claim = vehicles_transposed.filter(d=>
+                d.policyholder_gender === driverGenderDropdown &&
+                d.age_range === driverAgeDropdown &&
+                d.policy_state === driverStateDropdown &&
+                d.policyholder_occupation_sector === driverOccSectorDropdown &&
+                d.claim_amount > 0)
+                
+// Calculate average claim size
+avg_driver_claim_amount =
+  filtered_driver_claim.length
+    ? filtered_driver_claim.reduce(
+        (sum, d) => sum + d.claim_amount,
+        0
+      ) / filtered_driver_claim.length
+    : null
+
+// Return average claim size
+avg_driver_claim_amount !== null
+  ? html`<span style="font-size:2vw">$${avg_driver_claim_amount.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2})}</span>`
+  : "N/A"
+
+// Create filtered dataset of driver summary based on driver dropdown selections.
+driver_selection = driver_level_summary_transposed.find(d =>
+  d.policyholder_gender === driverGenderDropdown &&
+  d.age_range === driverAgeDropdown &&
+  d.policy_state === driverStateDropdown &&
+  d.policyholder_occupation_sector === driverOccSectorDropdown
+)
+```
+</span>
+</div>
+:::
+
+### Row {height="55%"}
+
+```{ojs, createScatterPlot}
+
+Plot.plot({
+  inset: 8,
+  grid: true,
+  color: {
+    legend: true,
+  },
+  marks: [
+    Plot.dot(vehicles_transposed, {x: "claim_amount", y: "age",
+      channels: {gender: "policyholder_gender", age: "age", state: "policy_state",                 occupation_sector: "policyholder_occupation_sector"},
+      tip: true}),
+      Plot.linearRegressionY(vehicles_transposed, {x: "claim_amount", y: "age"})
+  ]
+})
+```
+
 
 ### Row {height="20%"}
 
-Placeholder text for Column 2, Row 3
+:::{.valuebox color="gray" .text-center}
+<div style="background-color: #333; color: white; border-radius: 10px; padding: 10px; display: flex; align-items: center">
+  <span style="font-size: 1vw; width: 100%;">
+```{ojs}
+
+// Display data reliability  
+driver_selection !== null
+  ? html`
+  <div style="font-size: 1vw">
+  <b>${driver_selection.data_reliability}</b>
+  </div>`
+  : "N/A"
+```
+ </span>
+</div>
+:::

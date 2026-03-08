@@ -1,13 +1,13 @@
 [
   {
-    "objectID": "about.html",
-    "href": "about.html",
-    "title": "About",
+    "objectID": "references.html",
+    "href": "references.html",
+    "title": "References",
     "section": "",
-    "text": "About this site\n\n1 + 1\n\n[1] 2",
+    "text": "https://observablehq.com/plot/",
     "crumbs": [
       "Home",
-      "About"
+      "References"
     ]
   },
   {
@@ -15,7 +15,7 @@
     "href": "index.html",
     "title": "Auto Risk Management Tool",
     "section": "",
-    "text": "This is a Quarto website.\nTo learn more about Quarto websites visit https://quarto.org/docs/websites.",
+    "text": "This risk management tool was created for Oakland University’s Winter 2026 MIS 6940 Project Seminar course.\nIt is a prototype only and all data is fictional.",
     "crumbs": [
       "Home"
     ]
